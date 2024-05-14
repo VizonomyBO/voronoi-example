@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoJSON Processor</title>
+    <style>
+        .drop-zone {
+            max-width: 300px;
+            height: 200px;
+            padding: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-family: "Quicksand", sans-serif;
+            font-weight: 700;
+            font-size: 20px;
+            cursor: pointer;
+            color: #cccccc;
+            border: 4px dashed #009578;
+            border-radius: 10px;
+        }
+        .drop-zone--over {
+            border-style: solid;
+        }
+        .copy-button {
+            display: inline-block;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            background-color: #009578;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .copy-button:hover {
+            background-color: #007a62;
+        }
+    </style>
+</head>
+<body>
+    <h1>Upload GeoJSON and Process</h1>
+    <form id="uploadForm" action="/process" method="POST" enctype="multipart/form-data">
+        <div class="drop-zone" id="drop-zone">
+            Drop your GeoJSON file here or click to upload
+            <input type="file" name="file" id="fileInput" hidden required>
+        </div>
+        <br>
+        <label for="target_area_ha">Target Area (ha):</label>
+        <input type="text" name="target_area_ha" id="target_area_ha" required>
+        <br><br>
+        <button class="copy-button" type="submit">Submit</button>
+    </form>
+    <button class="copy-button" id="copyButton">Copy to Clipboard</button>
+
+    <div id="result"></div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('fileInput');
+        const uploadForm = document.getElementById('uploadForm');
+        const resultDiv = document.getElementById('result');
+        const copyButton = document.getElementById('copyButton');
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+                dropZone.textContent = fileInput.files[0].name;
+            }
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drop-zone--over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drop-zone--over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileInput.files = e.dataTransfer.files;
+            dropZone.textContent = fileInput.files[0].name;
+            dropZone.classList.remove('drop-zone--over');
+        });
+
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Prevent default form submission behavior
+
+            if (!fileInput.files.length) {
+                alert('Please select a file.');
+                return;
+            }
+            const file = fileInput.files[0];
+            const targetAreaHa = document.getElementById('target_area_ha').value;
+
+            if (!targetAreaHa) {
+                alert('Please enter the target area.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('target_area_ha', targetAreaHa);
+
+            try {
+                const response = await fetch('/process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log('Success:', result);
+                resultDiv.textContent = JSON.stringify(result, null, 2);
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.textContent = 'Error: ' + error.message;
+            }
+        });
+
+        copyButton.addEventListener('click', () => {
+            const textToCopy = resultDiv.textContent;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                alert('Text copied to clipboard');
+            }).catch((error) => {
+                alert('Failed to copy text: ', error);
+            });
+        });
+    </script>
+</body>
+</html>
