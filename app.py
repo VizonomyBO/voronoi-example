@@ -51,9 +51,9 @@ def process_geojson():
     if not features:
         return "No features found in the GeoJSON file", 400
 
-    multipoint, transformed_points, buffered_points = process_features(features)
-    voronoi_regions = generate_voronoi_polygons(multipoint, transformed_points)
-    output_geojson = create_output_geojson(features, transformed_points, buffered_points, voronoi_regions)
+    multipoint, transformed_points, buffered_points, crs_dst = process_features(features)
+    voronoi_regions = generate_voronoi_polygons(transformed_points)
+    output_geojson = create_output_geojson(features, transformed_points, buffered_points, voronoi_regions, crs_dst)
 
     return jsonify(output_geojson)
 
@@ -62,7 +62,7 @@ def process_features(features):
     Process the features from the GeoJSON file.
     
     :param features: List of features from the GeoJSON file
-    :return: A tuple containing MultiPoint, list of transformed points, and list of buffered points
+    :return: A tuple containing MultiPoint, list of transformed points, list of buffered points, and the destination CRS
     """
     multipoint = MultiPoint([shape(f['geometry']) for f in features])
     center = multipoint.centroid
@@ -80,20 +80,19 @@ def process_features(features):
         transformed_points.append(transformed_point)
         buffered_points.append(transformed_point.buffer(buffer_distance))
 
-    return multipoint, transformed_points, buffered_points
+    return multipoint, transformed_points, buffered_points, crs_dst
 
-def generate_voronoi_polygons(multipoint, transformed_points):
+def generate_voronoi_polygons(transformed_points):
     """
     Generate Voronoi polygons based on transformed points.
     
-    :param multipoint: MultiPoint object of the original points
     :param transformed_points: List of transformed points
     :return: Voronoi polygons
     """
     envelope = GeometryCollection(transformed_points).envelope.buffer(BUFFER_ENVELOPE_SIZE)
     return voronoi_polygons(MultiPoint(transformed_points), extend_to=envelope)
 
-def create_output_geojson(features, transformed_points, buffered_points, voronoi_regions):
+def create_output_geojson(features, transformed_points, buffered_points, voronoi_regions, crs_dst):
     """
     Create the output GeoJSON data.
     
@@ -101,9 +100,10 @@ def create_output_geojson(features, transformed_points, buffered_points, voronoi
     :param transformed_points: List of transformed points
     :param buffered_points: List of buffered points
     :param voronoi_regions: Voronoi polygons
+    :param crs_dst: Destination CRS used for transformation
     :return: Output GeoJSON data as a dictionary
     """
-    to_wgs84 = pyproj.Transformer.from_crs(voronoi_regions.crs, WGS84_CRS).transform
+    to_wgs84 = pyproj.Transformer.from_crs(crs_dst, WGS84_CRS).transform
 
     voronoi_polygons_per_point = [0] * len(transformed_points)
     for i, point in enumerate(transformed_points):
