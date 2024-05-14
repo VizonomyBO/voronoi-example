@@ -48,9 +48,6 @@
             Drop your GeoJSON file here or click to upload
             <input type="file" name="file" id="fileInput" hidden required>
         </div>
-        <br>
-        <label for="target_area_ha">Target Area (ha):</label>
-        <input type="text" name="target_area_ha" id="target_area_ha" required>
         <br><br>
         <button class="copy-button" type="submit">Submit</button>
     </form>
@@ -98,17 +95,10 @@
                 alert('Please select a file.');
                 return;
             }
+
             const file = fileInput.files[0];
-            const targetAreaHa = document.getElementById('target_area_ha').value;
-
-            if (!targetAreaHa) {
-                alert('Please enter the target area.');
-                return;
-            }
-
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('target_area_ha', targetAreaHa);
 
             try {
                 const response = await fetch('/process', {
