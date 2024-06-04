@@ -121,11 +121,29 @@
 
         copyButton.addEventListener('click', () => {
             const textToCopy = resultDiv.textContent;
-            navigator.clipboard.writeText(textToCopy).then(() => {
-                alert('Text copied to clipboard');
-            }).catch((error) => {
-                alert('Failed to copy text: ', error);
-            });
+            if (textToCopy) {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        alert('Text copied to clipboard');
+                    }).catch((error) => {
+                        alert('Failed to copy text: ' + error);
+                    });
+                } else {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = textToCopy;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        alert('Text copied to clipboard');
+                    } catch (err) {
+                        alert('Failed to copy text: ' + err);
+                    }
+                    document.body.removeChild(textArea);
+                }
+            } else {
+                alert('No text to copy');
+            }
         });
     </script>
 </body>
