@@ -1,5 +1,6 @@
 import json
 import os
+from math import pi
 
 import pyproj
 from flask import Flask, jsonify, render_template, request
@@ -15,16 +16,9 @@ ADDITIONAL_RADIUS = 5
 
 app = Flask(__name__)
 
-def calculate_circle_radius(ha, additional_radius=ADDITIONAL_RADIUS):
-    """
-    Estimate the circle radius in meters based on hectares.
-    
-    :param ha: Area in hectares
-    :param additional_radius: Additional radius to add to the calculated radius
-    :return: Estimated radius in meters
-    """
-    m2 = ha * 10000
-    radius = (m2 / 3.1415) ** 0.5
+def calculate_circle_radius(hectares_area, additional_radius=ADDITIONAL_RADIUS):
+    square_meters = hectares_area * 10000 #transform hectares into square meters
+    radius = (square_meters / pi) ** 0.5 #calculate the radius of the circle
     return radius + additional_radius
 
 @app.route('/')
@@ -33,11 +27,6 @@ def index():
 
 @app.route('/process', methods=['POST'])
 def process_geojson():
-    """
-    Process the uploaded GeoJSON file to generate buffered Voronoi polygons.
-    
-    :return: JSON response with the processed GeoJSON data or an error message
-    """
     file = request.files.get('file')
     if not file:
         return "Missing file", 400
@@ -58,12 +47,6 @@ def process_geojson():
     return jsonify(output_geojson)
 
 def process_features(features):
-    """
-    Process the features from the GeoJSON file.
-    
-    :param features: List of features from the GeoJSON file
-    :return: A tuple containing MultiPoint, list of transformed points, list of buffered points, and the destination CRS
-    """
     multipoint = MultiPoint([shape(f['geometry']) for f in features])
     center = multipoint.centroid
     proj_str = f"+ellps=WGS84 +proj=tmerc +lat_0={center.y} +lon_0={center.x} +units=m +no_defs"
@@ -83,26 +66,10 @@ def process_features(features):
     return multipoint, transformed_points, buffered_points, crs_dst
 
 def generate_voronoi_polygons(transformed_points):
-    """
-    Generate Voronoi polygons based on transformed points.
-    
-    :param transformed_points: List of transformed points
-    :return: Voronoi polygons
-    """
     envelope = GeometryCollection(transformed_points).envelope.buffer(BUFFER_ENVELOPE_SIZE)
     return voronoi_polygons(MultiPoint(transformed_points), extend_to=envelope)
 
 def create_output_geojson(features, transformed_points, buffered_points, voronoi_regions, crs_dst):
-    """
-    Create the output GeoJSON data.
-    
-    :param features: Original features from the GeoJSON file
-    :param transformed_points: List of transformed points
-    :param buffered_points: List of buffered points
-    :param voronoi_regions: Voronoi polygons
-    :param crs_dst: Destination CRS used for transformation
-    :return: Output GeoJSON data as a dictionary
-    """
     to_wgs84 = pyproj.Transformer.from_crs(crs_dst, WGS84_CRS).transform
 
     voronoi_polygons_per_point = [0] * len(transformed_points)
