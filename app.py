@@ -3,62 +3,30 @@ import os
 from math import pi
 
 import pyproj
-from flask import Flask, jsonify, render_template, request
 from shapely import voronoi_polygons
 from shapely.geometry import GeometryCollection, MultiPoint, Point, mapping, shape
 from shapely.ops import transform
 
 # Constants
-WGS84_CRS = pyproj.crs.CRS('epsg:4326')
-DEFAULT_PORT = 8080
+WGS84_CRS = pyproj.crs.CRS("epsg:4326")
 BUFFER_ENVELOPE_SIZE = 5000
 ADDITIONAL_RADIUS = 5
 
-app = Flask(__name__)
 
 def calculate_circle_radius(hectares_area, additional_radius=ADDITIONAL_RADIUS):
     try:
-        square_meters = hectares_area * 10000 #transform hectares into square meters
-        radius = (square_meters / pi) ** 0.5 #calculate the radius of the circle
+        square_meters = hectares_area * 10000  # transform hectares into square meters
+        radius = (square_meters / pi) ** 0.5  # calculate the radius of the circle
         return radius + additional_radius
-    except:
-        print("Error in calculate_circle_radius")
+    except Exception as e:
+        print(f"Error in calculate_circle_radius: {e}")
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/process', methods=['POST'])
-def process_geojson():
-    try:
-        file = request.files.get('file')
-        if not file:
-            return "Missing file", 400
-
-        try:
-            print("Reading GeoJSON file")
-            geojson_data = json.load(file)
-        except json.JSONDecodeError:
-            return "Invalid GeoJSON file", 400
-        
-        print("GeoJSON file read successfully")
-        features = geojson_data.get('features', [])
-        if not features:
-            return "No features found in the GeoJSON file", 400
-
-        multipoint, transformed_points, buffered_points, crs_dst = process_features(features)
-        voronoi_regions = generate_voronoi_polygons(transformed_points)
-        output_geojson = create_output_geojson(features, transformed_points, buffered_points, voronoi_regions, crs_dst)
-    
-        return jsonify(output_geojson)
-    except:
-        print("Error in process_geojson")
 
 def process_features(features):
     try:
         multipoint_list = []
         for f in features:
-            geometry = f.get('geometry')
+            geometry = f.get("geometry")
             if geometry:
                 multipoint_list.append(shape(geometry))
 
@@ -72,24 +40,27 @@ def process_features(features):
         transformed_points = []
         buffered_points = []
         for feature in features:
-            point = shape(feature.get('geometry', {'type': 'Point', 'coordinates': [0, 0]}))
-            properties = feature.get('properties', {})
-            est_area = properties.get('est_area', 0)
+            point = shape(feature.get("geometry", {"type": "Point", "coordinates": [0, 0]}))
+            properties = feature.get("properties", {})
+            est_area = properties.get("est_area", 0)
             buffer_distance = calculate_circle_radius(est_area)
             transformed_point = transform(to_tmp_tmerc, Point(point.x, point.y))
             transformed_points.append(transformed_point)
             buffered_points.append(transformed_point.buffer(buffer_distance))
 
         return multipoint, transformed_points, buffered_points, crs_dst
-    except:
-        print("Error in process_features")
+    except Exception as e:
+        print(f"Error in process_features: {e}")
+
 
 def generate_voronoi_polygons(transformed_points):
     try:
         envelope = GeometryCollection(transformed_points).envelope.buffer(BUFFER_ENVELOPE_SIZE)
         return voronoi_polygons(MultiPoint(transformed_points), extend_to=envelope)
-    except:
-        print("Error in generate_voronoi_polygons")
+    except Exception as e:
+        print(f"Error in generate_voronoi_polygons: {e}")
+
+
 def create_output_geojson(features, transformed_points, buffered_points, voronoi_regions, crs_dst):
     try:
         to_wgs84 = pyproj.Transformer.from_crs(crs_dst, WGS84_CRS).transform
@@ -101,23 +72,60 @@ def create_output_geojson(features, transformed_points, buffered_points, voronoi
                     voronoi_polygons_per_point[i] = region
 
         output_features = []
-        for i, (voronoi_polygon, buffered_point, feature) in enumerate(zip(voronoi_polygons_per_point, buffered_points, features)):
+        for i, (voronoi_polygon, buffered_point, feature) in enumerate(
+            zip(voronoi_polygons_per_point, buffered_points, features)
+        ):
             intersection_region = buffered_point.intersection(voronoi_polygon)
             if intersection_region.is_valid and not intersection_region.is_empty:
                 region_in_wgs84 = transform(to_wgs84, intersection_region)
-                properties = feature.get('properties', {})
-                output_features.append({
-                    'type': 'Feature',
-                    'geometry': mapping(region_in_wgs84),
-                    'properties': properties
-                })
+                properties = feature.get("properties", {})
+                output_features.append(
+                    {
+                        "type": "Feature",
+                        "geometry": mapping(region_in_wgs84),
+                        "properties": properties,
+                    }
+                )
 
-        return {
-            'type': 'FeatureCollection',
-            'features': output_features
-        }
-    except:
-        print("Error in create output geojson")
+        return {"type": "FeatureCollection", "features": output_features}
+    except Exception as e:
+        print(f"Error in create_output_geojson: {e}")
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', DEFAULT_PORT)))
+
+def main(input_geojson_path, output_geojson_path):
+    try:
+        with open(input_geojson_path, "r") as file:
+            print("Reading GeoJSON file")
+            geojson_data = json.load(file)
+
+        print("GeoJSON file read successfully")
+        features = geojson_data.get("features", [])
+        if not features:
+            print("No features found in the GeoJSON file")
+            return
+
+        multipoint, transformed_points, buffered_points, crs_dst = process_features(features)
+        voronoi_regions = generate_voronoi_polygons(transformed_points)
+        output_geojson = create_output_geojson(
+            features, transformed_points, buffered_points, voronoi_regions, crs_dst
+        )
+
+        with open(output_geojson_path, "w") as output_file:
+            json.dump(output_geojson, output_file)
+            print(f"Output GeoJSON written to: {output_geojson_path}")
+
+    except Exception as e:
+        print(f"Error in main: {e}")
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Process a GeoJSON file and generate a Voronoi diagram."
+    )
+    parser.add_argument("input_geojson", type=str, help="Path to the input GeoJSON file")
+    parser.add_argument("output_geojson", type=str, help="Path to the output GeoJSON file")
+    args = parser.parse_args()
+
+    main(args.input_geojson, args.output_geojson)
